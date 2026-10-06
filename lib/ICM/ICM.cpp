@@ -2,10 +2,12 @@
 
 #define SPI_PORT SPI     // Your desired SPI port.       Used only when "USE_SPI" is defined
 #define SPI_FREQ 5000000 // You can override the default SPI frequency
-#define CS_PIN 36        // Which pin you connect CS to. Used only when "USE_SPI" is defined
+#define CS_PIN 36        // Which pin you connect CS to. Used only when "USE_SPI" is define
+
 // https://github.com/sparkfun/SparkFun_ICM-20948_ArduinoLibrary/blob/main/examples/Arduino/Example1_Basics/Example1_Basics.ino
 // https://github.com/UT2UH/Arduino_ICM20948_DMP_Full-Function/blob/main/ICM20948/Arduino-ICM20948.cpp
 //https://d17t6iyxenbwp1.cloudfront.net/s3fs-public/2026-03/ds-000189-icm-20948-datasheet.pdf?VersionId=DDZ6UQd2jbFGUCqi1PY4w_nR5jWpqKVN
+//Dependency: https://github.com/sparkfun/SparkFun_ICM-20948_ArduinoLibrary/tree/main
 ICM20948::ICM20948(uint8_t csPin, SPIClass &spiPort)
 {
     // Constructor implementation
