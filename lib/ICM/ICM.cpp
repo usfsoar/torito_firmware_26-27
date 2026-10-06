@@ -54,7 +54,7 @@ void ICM20948::update()
 {
     if (_sensor.dataReady())
     {
-        _sensor.resetFIFO();
+        _sensor.resetFIFO(); //reset to prevent overflow and reading corrupted bits 
 
         sensorData.magneticField.x = _sensor.magX();
         delay(10);
