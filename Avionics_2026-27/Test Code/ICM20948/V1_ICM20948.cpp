@@ -1,4 +1,4 @@
-#include "ICM.h"
+#include "V1_ICM20948.h"
 
 #define SPI_PORT SPI     // Your desired SPI port.       Used only when "USE_SPI" is defined
 #define SPI_FREQ 5000000 // You can override the default SPI frequency
