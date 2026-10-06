@@ -2,7 +2,6 @@
 #define ICM20948_H
 
 #include "ICM_20948.h"
-#include "Arduino-ICM20948.h"
 #include<SPI.h>
 
 
