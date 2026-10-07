@@ -1,6 +1,6 @@
 #include "RadioTransmitter.h"
 #include "Config.h"
-#include "GpsPacket.h"
+#include "FlightPacket.h"
 
 RadioTransmitter::RadioTransmitter()
     : radio(RFM96W_CS_PIN, RFM96W_INT_PIN)
@@ -70,16 +70,10 @@ bool RadioTransmitter::begin()
     return true;
 }
 
-bool RadioTransmitter::transmit(float lat, float lon, float alt, float spd, int sats, int fix)
+bool RadioTransmitter::transmit(const FlightData &data)
 {
-    GpsPacket pkt;
-
-    pkt.lat_e6   = roundToInt((double)lat * 1000000.0);
-    pkt.lon_e6   = roundToInt((double)lon * 1000000.0);
-    pkt.alt_cm   = roundToInt((double)alt * 100.0);
-    pkt.speed_cs = roundToInt((double)spd * 100.0);
-    pkt.sats     = (uint8_t)sats;
-    pkt.fix      = (uint8_t)fix;
+    FlightPacket pkt;
+    packFlightData(data, pkt);
 
     // Clear old IRQ flags
     radio.spiWrite(REG_IRQ_FLAGS, 0xFF);

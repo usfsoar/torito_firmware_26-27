@@ -19,11 +19,17 @@ void GPSReader::begin()
 
 void GPSReader::update()
 {
-    gps.read();
-
-    if (gps.newNMEAreceived())
+    // Read EVERY character that has arrived, not just one. The main loop can be
+    // busy for a few milliseconds (radio send, SD write), and at 9600 baud the
+    // serial buffer would otherwise fill up and drop characters.
+    while (Serial2.available())
     {
-        gps.parse(gps.lastNMEA());
+        gps.read();
+
+        if (gps.newNMEAreceived())
+        {
+            gps.parse(gps.lastNMEA());
+        }
     }
 }
 

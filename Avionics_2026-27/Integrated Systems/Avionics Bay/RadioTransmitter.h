@@ -1,8 +1,9 @@
 #pragma once
 #include <Arduino.h>
 #include <RH_RF95.h>
+#include "FlightData.h"
 
-// Sends GpsPacket data over the RFM96W LoRa radio.
+// Sends FlightData over the RFM96W LoRa radio as a 24-byte FlightPacket.
 class RadioTransmitter
 {
 public:
@@ -10,9 +11,9 @@ public:
 
     bool begin();
 
-    // Builds the 18-byte packet and sends it.
+    // Packs the data into a FlightPacket and sends it.
     // Returns true only if the radio reported the transmission finished.
-    bool transmit(float lat, float lon, float alt, float spd, int sats, int fix);
+    bool transmit(const FlightData &data);
 
 private:
     RH_RF95 radio;

@@ -1,29 +1,41 @@
 #pragma once
 #include <Arduino.h>
 #include <SdFat.h>
+#include "FlightData.h"
 
-// Logs transmitted GPS data to gpslog.csv on the SD card.
-// Writes are buffered in RAM so logging does not slow down the radio.
+// Logs to the SD card, buffered in RAM so logging does not slow down the radio.
+//   gpslog.csv   - GPS data, one row per transmitted packet (when the GPS has a fix)
+//   sensors.csv  - altitude, raw accelerometer/gyro and derived angles, 10 rows per second
 class SDLogger
 {
 public:
     bool begin();
 
-    void log(float lat, float lon, float alt, float spd, int sats, int fix);
+    void logGps(const FlightData &d);
+    void logSensors(const SensorSample &s);
 
-    // Call every loop(): flushes the buffer to the card about once a second
+    // Call every loop(): flushes the buffers to the card about once a second
     void service();
 
 private:
     static const size_t BUF_SIZE = 4096;
 
+    struct Channel
+    {
+        FsFile file;
+        char   buf[BUF_SIZE];
+        size_t idx  = 0;
+        bool   open = false;
+    };
+
     SdFs     sd;
-    FsFile   file;
+    Channel  gpsLog;
+    Channel  sensorLog;
 
-    char     buf[BUF_SIZE];
-    size_t   idx       = 0;
     uint32_t lastFlush = 0;
-    bool     ok        = false;
+    bool     cardOk    = false;
 
-    bool flushBuffer();
+    bool openChannel(Channel &c, const char *name, const char *header);
+    void append(Channel &c, const char *line, int n);
+    bool flushChannel(Channel &c);
 };

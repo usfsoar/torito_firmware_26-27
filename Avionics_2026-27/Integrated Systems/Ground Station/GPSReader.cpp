@@ -15,11 +15,15 @@ void GPSReader::begin()
 
 void GPSReader::update()
 {
-    gps.read();
-
-    if (gps.newNMEAreceived())
+    // Read every character that has arrived, not just one
+    while (Serial2.available())
     {
-        gps.parse(gps.lastNMEA());
+        gps.read();
+
+        if (gps.newNMEAreceived())
+        {
+            gps.parse(gps.lastNMEA());
+        }
     }
 }
 

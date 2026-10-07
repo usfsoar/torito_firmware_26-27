@@ -6,7 +6,7 @@
 // ============================================================
 
 // ----- RFM96W LoRa radio -----
-// Uses the normal SPI bus: SCK = 13, MOSI = 11, MISO = 12
+// Normal SPI bus: SCK = 13, MOSI = 11, MISO = 12
 const int RFM96W_CS_PIN  = 40;
 const int RFM96W_RST_PIN = 9;
 const int RFM96W_INT_PIN = 2;
@@ -45,5 +45,6 @@ const bool ENABLE_FHSS = false;
 // DISPLAY
 // ============================================================
 
-// Show the full data block this often (every packet is still counted and logged)
+// The Serial Monitor shows the latest packet this often
+// (every packet is still counted and logged to the SD card)
 const uint32_t PRINT_EVERY_MS = 1000;

@@ -1,6 +1,29 @@
 #include "SDLogger.h"
 #include "Config.h"
 
+// Appends one number to a CSV line, or NA when the value is not available.
+static void addField(char *line, size_t cap, size_t &n, bool valid, float v, int decimals, bool comma)
+{
+    if (n >= cap)
+        return;
+
+    int w;
+
+    if (valid)
+        w = snprintf(line + n, cap - n, "%.*f", decimals, (double)v);
+    else
+        w = snprintf(line + n, cap - n, "NA");
+
+    if (w > 0)
+        n += (size_t)w;
+
+    if (comma && n + 1 < cap)
+    {
+        line[n++] = ',';
+        line[n]   = '\0';
+    }
+}
+
 bool SDLogger::flushBuffer()
 {
     if (!ok)
@@ -130,7 +153,7 @@ bool SDLogger::begin()
     // Add the CSV header if this is a new file
     if (file.size() == 0)
     {
-        file.println("ms,lat,lon,alt_m,speed_kn,sats,fix,rssi_dbm,dist_m");
+        file.println("ms,fix,lat,lon,gps_alt_m,speed_kn,sats,baro_alt_m,phi_deg,theta_deg,vert_acc_mps2,rssi_dbm,dist_m");
         file.sync();
 
         Serial.println("CSV header created.");
@@ -145,33 +168,42 @@ bool SDLogger::begin()
     return true;
 }
 
-void SDLogger::log(float lat, float lon, float alt, float spd, int sats, int fix, int rssi, float dist)
+void SDLogger::log(const FlightData &d, int rssi, float dist)
 {
     if (!ok)
         return;
 
-    char line[96];
+    char   line[220];
+    size_t n = 0;
 
-    int n = snprintf(
-        line,
-        sizeof(line),
-        "%lu,%.6f,%.6f,%.2f,%.2f,%d,%d,%d,%.2f\n",
-        (unsigned long)millis(),
-        lat,
-        lon,
-        alt,
-        spd,
-        sats,
-        fix,
-        rssi,
-        dist
-    );
+    n += snprintf(line, sizeof(line), "%lu,%d,", (unsigned long)millis(), d.fix);
 
-    if (n <= 0 || n >= (int)sizeof(line))
+    const bool gps = (d.fix > 0);
+
+    addField(line, sizeof(line), n, gps, d.lat,     6, true);
+    addField(line, sizeof(line), n, gps, d.lon,     6, true);
+    addField(line, sizeof(line), n, gps, d.gpsAltM, 0, true);
+    addField(line, sizeof(line), n, gps, d.speedKn, 1, true);
+
+    n += snprintf(line + n, sizeof(line) - n, "%d,", d.sats);
+
+    addField(line, sizeof(line), n, d.baroValid, d.baroAltM,    2, true);
+    addField(line, sizeof(line), n, d.imuValid,  d.phiDeg,      2, true);
+    addField(line, sizeof(line), n, d.imuValid,  d.thetaDeg,    2, true);
+    addField(line, sizeof(line), n, d.imuValid,  d.vertAccMps2, 2, true);
+
+    n += snprintf(line + n, sizeof(line) - n, "%d,", rssi);
+
+    addField(line, sizeof(line), n, dist >= 0, dist, 2, false);
+
+    if (n + 2 >= sizeof(line))
         return;
 
+    line[n++] = '\n';
+    line[n]   = '\0';
+
     // Buffer full -> write it out first
-    if (idx + (size_t)n > BUF_SIZE)
+    if (idx + n > BUF_SIZE)
     {
         flushBuffer();
     }

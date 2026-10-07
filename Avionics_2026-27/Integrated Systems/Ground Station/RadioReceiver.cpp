@@ -1,6 +1,6 @@
 #include "RadioReceiver.h"
 #include "Config.h"
-#include "GpsPacket.h"
+#include "FlightPacket.h"
 
 RadioReceiver::RadioReceiver()
     : radio(RFM96W_CS_PIN, RFM96W_INT_PIN)
@@ -54,7 +54,7 @@ int RadioReceiver::rssi()
     return radio.lastRssi();
 }
 
-bool RadioReceiver::receive(float &lat, float &lon, float &alt, float &spd, int &sats, int &fix)
+bool RadioReceiver::receive(FlightData &data)
 {
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
@@ -62,19 +62,14 @@ bool RadioReceiver::receive(float &lat, float &lon, float &alt, float &spd, int 
     if (!radio.recv(buf, &len))
         return false;
 
-    // Not our binary packet, ignore it
-    if (len != sizeof(GpsPacket))
+    // Not our packet (for example, an old 18-byte GPS-only packet), ignore it
+    if (len != sizeof(FlightPacket))
         return false;
 
-    GpsPacket pkt;
+    FlightPacket pkt;
     memcpy(&pkt, buf, sizeof(pkt));
 
-    lat  = pkt.lat_e6   / 1000000.0f;
-    lon  = pkt.lon_e6   / 1000000.0f;
-    alt  = pkt.alt_cm   / 100.0f;
-    spd  = pkt.speed_cs / 100.0f;
-    sats = pkt.sats;
-    fix  = pkt.fix;
+    unpackFlightPacket(pkt, data);
 
     return true;
 }

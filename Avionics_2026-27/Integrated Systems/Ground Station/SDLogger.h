@@ -1,15 +1,17 @@
 #pragma once
 #include <Arduino.h>
 #include <SdFat.h>
+#include "FlightData.h"
 
-// Logs received GPS data to receiver_log.csv on the SD card.
+// Logs received data to receiver_log.csv on the SD card.
 // Writes are buffered in RAM so logging does not slow down the radio.
 class SDLogger
 {
 public:
     bool begin();
 
-    void log(float lat, float lon, float alt, float spd, int sats, int fix, int rssi, float dist);
+    // dist < 0 means "no distance available"
+    void log(const FlightData &d, int rssi, float dist);
 
     // Call every loop(): flushes the buffer to the card about once a second
     void service();

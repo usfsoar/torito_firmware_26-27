@@ -1,8 +1,9 @@
 #pragma once
 #include <Arduino.h>
 #include <RH_RF95.h>
+#include "FlightData.h"
 
-// Receives GpsPacket data from the transmitter over the RFM96W LoRa radio.
+// Receives FlightPacket data from the transmitter over the RFM96W LoRa radio.
 class RadioReceiver
 {
 public:
@@ -14,8 +15,8 @@ public:
     int  rssi();        // signal strength of the last packet
 
     // Reads one packet and converts it to normal units.
-    // Returns false if nothing valid was received.
-    bool receive(float &lat, float &lon, float &alt, float &spd, int &sats, int &fix);
+    // Returns false if nothing valid was received (or it was not a 24-byte FlightPacket).
+    bool receive(FlightData &data);
 
 private:
     RH_RF95 radio;

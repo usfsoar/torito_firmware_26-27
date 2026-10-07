@@ -1,13 +1,15 @@
 // ============================================================
-// SOAR USF - Main Receiver V1 (Teensy 4.1)
-// Binary packets + distance to rocket + external SD logger
+// SOAR USF - Ground Station (Teensy 4.1 receiver)
+// Receives the 24-byte FlightPacket from the transmitter, shows it,
+// measures distance to the rocket, and logs everything to the SD card.
 //
 // Files in this sketch folder:
-//   Config.h             pins, radio settings, flags
-//   GpsPacket.h          the 18-byte radio packet (same as transmitter)
-//   GPSReader.h/.cpp     receiver's own GPS + distance calculation
-//   RadioReceiver.h/.cpp RFM96W radio
-//   SDLogger.h/.cpp      SD card logging
+//   Config.h               pins, settings, flags
+//   FlightData.h           values in normal units
+//   FlightPacket.h         the 24-byte radio packet (same file as the transmitter)
+//   GPSReader.h/.cpp       receiver's own GPS + distance calculation
+//   RadioReceiver.h/.cpp   RFM96W radio
+//   SDLogger.h/.cpp        SD card logging (receiver_log.csv)
 // ============================================================
 
 // Libraries are listed here so the Arduino IDE finds them
@@ -18,7 +20,8 @@
 #include <SdFat.h>
 
 #include "Config.h"
-#include "GpsPacket.h"
+#include "FlightData.h"
+#include "FlightPacket.h"
 #include "GPSReader.h"
 #include "RadioReceiver.h"
 #include "SDLogger.h"
@@ -31,52 +34,96 @@ GPSReader     receiverGPS;
 SDLogger      sdLogger;
 RadioReceiver receiver;
 
-uint32_t packetCount   = 0;
-uint32_t lastRateTime  = 0;
-uint32_t lastPrintTime = 0;
+uint32_t packetCount  = 0;   // packets received since the last printout
+uint32_t lastPrint    = 0;
+
+// The newest packet, shown once a second
+FlightData latest;
+bool       haveLatest  = false;
+int        latestRssi  = 0;
+float      latestDist  = -1;
+
+// Highest barometric altitude seen in the packets received
+bool  haveMaxAlt = false;
+float maxBaroAltM = 0;
 
 // ============================================================
 // SERIAL OUTPUT
 // ============================================================
 
-void printRocketData(float lat, float lon, float alt, float spd,
-                     int sats, int fix, int rssi, float dist)
+void printLatest()
 {
-    Serial.println("=== Rocket GPS Data (latest packet) ===");
+    Serial.println("=== Rocket data (latest packet) ===");
 
-    Serial.print("Latitude:    ");
-    Serial.println(lat, 6);
-
-    Serial.print("Longitude:   ");
-    Serial.println(lon, 6);
-
-    Serial.print("Altitude:    ");
-    Serial.print(alt);
-    Serial.println(" m");
-
-    Serial.print("Speed:       ");
-    Serial.print(spd);
-    Serial.println(" knots");
-
-    Serial.print("Satellites:  ");
-    Serial.println(sats);
-
-    Serial.print("Fix Quality: ");
-    Serial.println(fix);
-
-    Serial.print("RSSI:        ");
-    Serial.print(rssi);
-    Serial.println(" dBm");
-
-    if (dist >= 0)
+    if (latest.fix > 0)
     {
-        Serial.print("Distance:    ");
-        Serial.print(dist);
+        Serial.print("GPS:         fix ");
+        Serial.print(latest.fix);
+        Serial.print(", ");
+        Serial.print(latest.sats);
+        Serial.println(" satellites");
+
+        Serial.print("  Lat/Lon:   ");
+        Serial.print(latest.lat, 6);
+        Serial.print(", ");
+        Serial.println(latest.lon, 6);
+
+        Serial.print("  GPS alt:   ");
+        Serial.print(latest.gpsAltM, 0);
+        Serial.print(" m   speed: ");
+        Serial.print(latest.speedKn, 1);
+        Serial.println(" knots");
+    }
+    else
+    {
+        Serial.print("GPS:         no fix on the rocket (satellites: ");
+        Serial.print(latest.sats);
+        Serial.println(")");
+    }
+
+    if (latest.baroValid)
+    {
+        Serial.print("Altitude:    ");
+        Serial.print(latest.baroAltM, 2);
+        Serial.print(" m (above power-on)   max received: ");
+        Serial.print(maxBaroAltM, 2);
         Serial.println(" m");
     }
     else
     {
-        Serial.println("Distance:    Waiting for receiver GPS fix...");
+        Serial.println("Altitude:    not available from the rocket");
+    }
+
+    if (latest.imuValid)
+    {
+        Serial.print("Angles:      phi (roll) ");
+        Serial.print(latest.phiDeg, 2);
+        Serial.print(" deg   theta (pitch) ");
+        Serial.print(latest.thetaDeg, 2);
+        Serial.println(" deg");
+
+        Serial.print("Vertical:    ");
+        Serial.print(latest.vertAccMps2, 2);
+        Serial.println(" m/s^2 (1 g removed)");
+    }
+    else
+    {
+        Serial.println("IMU:         not available from the rocket");
+    }
+
+    Serial.print("RSSI:        ");
+    Serial.print(latestRssi);
+    Serial.println(" dBm");
+
+    if (latestDist >= 0)
+    {
+        Serial.print("Distance:    ");
+        Serial.print(latestDist);
+        Serial.println(" m");
+    }
+    else
+    {
+        Serial.println("Distance:    waiting for a GPS fix on both the rocket and this receiver");
     }
 
     Serial.print("Receiver GPS: ");
@@ -101,7 +148,7 @@ void setup()
     while (!Serial)
         delay(10);
 
-    Serial.println("SOAR USF - Main Receiver V1 (BINARY)");
+    Serial.println("SOAR USF - Ground Station");
 
     // ----- Receiver's own GPS -----
     receiverGPS.begin();
@@ -143,44 +190,51 @@ void loop()
 
     if (receiver.available())
     {
-        float rocketLat = 0, rocketLon = 0, altitude = 0, speed = 0;
-        int   satellites = 0, fixQuality = 0;
+        FlightData data;
 
-        if (receiver.receive(rocketLat, rocketLon, altitude, speed, satellites, fixQuality))
+        if (receiver.receive(data))
         {
             packetCount++;
 
-            int   rssi = receiver.rssi();
+            const int rssi = receiver.rssi();
             float dist = -1;
 
-            if (receiverGPS.hasFix())
-                dist = receiverGPS.distanceTo(rocketLat, rocketLon);
+            // Distance needs a real GPS fix on BOTH the rocket and this receiver
+            if (data.fix > 0 && receiverGPS.hasFix())
+                dist = receiverGPS.distanceTo(data.lat, data.lon);
 
-            // Print the full block only once per second so the Serial Monitor can keep up
-            if (millis() - lastPrintTime >= PRINT_EVERY_MS)
+            if (data.baroValid && (!haveMaxAlt || data.baroAltM > maxBaroAltM))
             {
-                lastPrintTime = millis();
-
-                printRocketData(rocketLat, rocketLon, altitude, speed,
-                                satellites, fixQuality, rssi, dist);
+                maxBaroAltM = data.baroAltM;
+                haveMaxAlt  = true;
             }
 
-            sdLogger.log(rocketLat, rocketLon, altitude, speed,
-                         satellites, fixQuality, rssi, dist);
+            latest     = data;
+            latestRssi = rssi;
+            latestDist = dist;
+            haveLatest = true;
+
+            sdLogger.log(data, rssi, dist);
         }
         else
         {
-            Serial.println("ERROR: Receive failed.");
+            Serial.println("ERROR: Receive failed (or not a 24-byte FlightPacket).");
         }
     }
 
-    // Packets-per-second counter
-    if (millis() - lastRateTime >= 1000)
+    // Once a second: packet rate, then the newest packet
+    if (millis() - lastPrint >= PRINT_EVERY_MS)
     {
+        lastPrint = millis();
+
         Serial.print(">>> Packets received in last second: ");
         Serial.println(packetCount);
 
-        packetCount  = 0;
-        lastRateTime = millis();
+        packetCount = 0;
+
+        if (haveLatest)
+            printLatest();
+        else
+            Serial.println("No packets yet.");
     }
 }
