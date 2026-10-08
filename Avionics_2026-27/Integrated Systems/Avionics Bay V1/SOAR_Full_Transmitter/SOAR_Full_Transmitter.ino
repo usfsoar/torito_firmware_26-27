@@ -25,6 +25,7 @@
 #include <SdFat.h>
 #include <ICM_20948.h>
 #include <MS5607.h>
+#include <Watchdog_t4.h>
 
 #include "Config.h"
 #include "FlightData.h"
@@ -39,8 +40,9 @@
 // ============================================================
 // GLOBAL OBJECTS
 // ============================================================
-
+WDT_T4<WDT3> wdt;
 SDLogger         sdLogger;
+OrientationState orientState;
 GPSReader        gpsReader;
 RadioTransmitter transmitter;
 IMUSensor        imu;
@@ -51,6 +53,7 @@ SensorSample sample;         // latest sensor values (updated 10 times a second)
 uint32_t lastTransmitTime = 0;
 uint32_t lastSensorRead   = 0;
 uint32_t lastPrint        = 0;
+bool recoveryFired = false;
 
 uint32_t packetsOk     = 0;  // counted since the last Serial printout
 uint32_t packetsFailed = 0;
@@ -94,7 +97,7 @@ void updateSensors()
         sample.gyDps = imu.gyroY_dps();
         sample.gzDps = imu.gyroZ_dps();
 
-        const Orientation o = computeOrientation(sample.axMg, sample.ayMg, sample.azMg);
+        const Orientation o = computeOrientation(sample.axMg, sample.ayMg, sample.azMg, sample.gxDps, sample.gyDps, sample.gzDps, 0.04f, orientState, 0.98f);
 
         sample.phiDeg      = o.phiDeg;
         sample.thetaDeg    = o.thetaDeg;
@@ -217,7 +220,7 @@ void printStatus()
 
 float computeAverageDeltaAltitude()
 {
-    static const int N = 10;
+    static const int N = 25;  // 25 samples = 1 second at 25 Hz
     static float altitudes[N] = {0};
     static int   idx = 0;
 
@@ -230,15 +233,7 @@ float computeAverageDeltaAltitude()
         sumDelta += altitudes[i] - altitudes[i - 1];
     }
 
-    return sumDelta / (N - 1);
-}
-
-bool ActivateRecovery(float AvgDeltaAlt) { 
-
-    if (AvgDeltaAlt < 0) {
-        return true;
-    }
-    return false;
+    return sumDelta / (N - 1); // average delta altitude per second I.E. velocity
 }
 
 // ============================================================
@@ -256,6 +251,7 @@ void setup()
     Serial.println("GPS + LoRa + SD + MS5607 + ICM-20948");
     Serial.println("====================================================");
 
+    
     // CRITICAL: all devices sharing the main SPI bus are deselected first.
     deselectAllMainSpiDevices();
     SPI.begin();
@@ -308,6 +304,10 @@ void setup()
         Serial.println("System will continue WITHOUT SD logging.");
     }
 
+    WDT_timings_t config;
+    config.timeout = 5000; // 5 s
+    wdt.begin(config);
+
     Serial.println();
     Serial.println("SYSTEM READY.");
     Serial.println("----------------------------------------------");
@@ -319,6 +319,7 @@ void setup()
 
 void loop()
 {
+    wdt.feed();
     // GPS parser needs frequent servicing.
     gpsReader.update();
 
@@ -328,13 +329,14 @@ void loop()
     // Refresh IMU whenever a fresh sample is available.
     imu.update();
 
-    // Sensors at 10 Hz
+    // Sensors at 25 Hz
     if (millis() - lastSensorRead >= SENSOR_READ_INTERVAL_MS)
     {
         lastSensorRead = millis();
         updateSensors();
-        if (ActivateRecovery(sample.baroAltM) && sample.baroAltM > 1000) { // use kalman filter altitude instead of sample.baroaAltM  
+        if (!recoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM > 1000 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
             Serial.println("Recovery Activated"); // add solenoid driver logic here
+            recoveryFired = true;
         }
     }
 
