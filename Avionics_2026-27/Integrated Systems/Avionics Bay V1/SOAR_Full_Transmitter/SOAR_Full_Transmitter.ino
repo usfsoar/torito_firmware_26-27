@@ -215,7 +215,25 @@ void printStatus()
     packetsFailed = 0;
 }
 
-bool ActivateRecovery(float AvgDeltaAlt) {
+float computeAverageDeltaAltitude()
+{
+    static const int N = 10;
+    static float altitudes[N] = {0};
+    static int   idx = 0;
+
+    altitudes[idx] = sample.baroAltM;
+    idx = (idx + 1) % N;
+
+    float sumDelta = 0;
+    for (int i = 1; i < N; i++)
+    {
+        sumDelta += altitudes[i] - altitudes[i - 1];
+    }
+
+    return sumDelta / (N - 1);
+}
+
+bool ActivateRecovery(float AvgDeltaAlt) { 
 
     if (AvgDeltaAlt < 0) {
         return true;
