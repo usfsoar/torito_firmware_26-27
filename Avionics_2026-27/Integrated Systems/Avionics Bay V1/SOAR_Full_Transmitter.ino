@@ -215,6 +215,14 @@ void printStatus()
     packetsFailed = 0;
 }
 
+bool ActivateRecovery(float AvgDeltaAlt) {
+
+    if (AvgDeltaAlt < 0) {
+        return true;
+    }
+    return false;
+}
+
 // ============================================================
 // SETUP
 // ============================================================
@@ -307,6 +315,9 @@ void loop()
     {
         lastSensorRead = millis();
         updateSensors();
+        if (ActivateRecovery(sample.baroAltM) && sample.baroAltM > 1000) { // use kalman filter altitude instead of sample.baroaAltM  
+            Serial.println("Recovery Activated"); // add solenoid driver logic here
+        }
     }
 
     // Radio packets
