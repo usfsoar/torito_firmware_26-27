@@ -36,6 +36,7 @@
 #include "IMUSensor.h"
 #include "Altimeter.h"
 #include "Orientation.h"
+#include "SDriver.h"
 
 // ============================================================
 // GLOBAL OBJECTS
@@ -47,13 +48,19 @@ GPSReader        gpsReader;
 RadioTransmitter transmitter;
 IMUSensor        imu;
 Altimeter        altimeter;
+SDriver          rec;
 
 SensorSample sample;         // latest sensor values (updated 10 times a second)
 
 uint32_t lastTransmitTime = 0;
 uint32_t lastSensorRead   = 0;
+uint32_t lastDrogueRec = 0;
+uint32_t lastMainRec = 0;
 uint32_t lastPrint        = 0;
-bool recoveryFired = false;
+bool DrogueRecoveryFired = false;
+bool MainRecoveryFired = false;
+bool DisarmDrogueRec = false;
+bool DisarmMainRec = false;
 
 uint32_t packetsOk     = 0;  // counted since the last Serial printout
 uint32_t packetsFailed = 0;
@@ -303,7 +310,8 @@ void setup()
         Serial.println("WARNING: SD failed.");
         Serial.println("System will continue WITHOUT SD logging.");
     }
-
+    
+    rec.begin();
     WDT_timings_t config;
     config.timeout = 5000; // 5 s
     wdt.begin(config);
@@ -334,9 +342,35 @@ void loop()
     {
         lastSensorRead = millis();
         updateSensors();
-        if (!recoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM > 1000 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
+        if (!DrogueRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.maxAltM - sample.baroAltM >= 100 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
             Serial.println("Recovery Activated"); // add solenoid driver logic here
-            recoveryFired = true;
+            rec.DriverActivate(0); // Activate solenoid driver 0
+            rec.DriverActivate(1); // Activate solenoid driver 1
+            lastDrogueRec = millis();
+            DrogueRecoveryFired = true;
+        }
+        
+        if (millis() - lastDrogueRec >= 10000 && !MainRecoveryFired && !DisarmDrogueRec) { // 10 seconds after drogue recovery, disarm the drogue solenoids
+            Serial.println("Disarming Drogue Recovery Solenoids");
+            lastDrogueRec = millis();
+            rec.DriverDeactivate(0); // Deactivate solenoid driver 0
+            rec.DriverDeactivate(1); // Deactivate solenoid driver 1
+            DisarmDrogueRec = true;
+        }
+
+        if (!MainRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM <=1000 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
+            Serial.println("Main Recovery Activated"); // add solenoid driver logic here
+            rec.DriverActivate(2); // Activate solenoid driver 2
+            rec.DriverActivate(3); // Activate solenoid driver 3
+            lastMainRec = millis();
+            MainRecoveryFired = true;
+        }
+        if (millis() - lastMainRec >= 10000 && !DisarmMainRec) { // 10 seconds after main recovery, disarm the main solenoids
+            Serial.println("Disarming Main Recovery Solenoids");
+            lastMainRec = millis();
+            rec.DriverDeactivate(2); // Deactivate solenoid driver 2
+            rec.DriverDeactivate(3); // Deactivate solenoid driver 3
+            DisarmMainRec = true;
         }
     }
 
