@@ -14,14 +14,7 @@ ICM20948::ICM20948(uint8_t csPin, SPIClass &spiPort)
     _csPin = csPin;
     _spiPort = &spiPort;
 }
-typedef struct
-{
-    double x;
-    double y;
-    double z;
-} Quat6;
 
-Quat6 Euler;
 
 void ICM20948::begin()
 {
@@ -78,17 +71,14 @@ void ICM20948::update()
         sensorData.gravity.y = 2 * (sensorData.orientation.w * sensorData.orientation.x + sensorData.orientation.y * sensorData.orientation.z);
         sensorData.gravity.z = sensorData.orientation.w * sensorData.orientation.w - sensorData.orientation.x * sensorData.orientation.x - sensorData.orientation.y * sensorData.orientation.y + sensorData.orientation.z * sensorData.orientation.z;
 
-        Euler.x = ((double)DMPdata.Quat6.Data.Q1) / 1073741824.0;
-        Euler.y = ((double)DMPdata.Quat6.Data.Q2) / 1073741824.0;
-        Euler.z = ((double)DMPdata.Quat6.Data.Q3) / 1073741824.0;
+    
 
         sensorData.linearAcceleration.x = _sensor.accX() - sensorData.gravity.x;
         sensorData.linearAcceleration.y = _sensor.accY() - sensorData.gravity.y;
         sensorData.linearAcceleration.z = _sensor.accZ() - sensorData.gravity.z;
 
-        // Serial.println("SENSOR UPDATED");
+    
     }
-    // digitalWrite(CS_PIN, HIGH);
 }
 void ICM20948::showSensorData()
 {
