@@ -71,14 +71,12 @@ void ICM20948::update()
         sensorData.gravity.y = 2 * (sensorData.orientation.w * sensorData.orientation.x + sensorData.orientation.y * sensorData.orientation.z);
         sensorData.gravity.z = sensorData.orientation.w * sensorData.orientation.w - sensorData.orientation.x * sensorData.orientation.x - sensorData.orientation.y * sensorData.orientation.y + sensorData.orientation.z * sensorData.orientation.z;
 
-    
-
         sensorData.linearAcceleration.x = _sensor.accX() - sensorData.gravity.x;
         sensorData.linearAcceleration.y = _sensor.accY() - sensorData.gravity.y;
         sensorData.linearAcceleration.z = _sensor.accZ() - sensorData.gravity.z;
-
-    
     }
+    else if (_sensor.statusString() == "Data Underflow")ICM20948::begin();
+
 }
 void ICM20948::showSensorData()
 {
