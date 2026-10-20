@@ -7,7 +7,7 @@ const float LowPressureSensor::V_MAX = 4.5f;
 const float LowPressureSensor::PSI_MAX = 2000.0f;
 
 bool LowPressureSensor::init() {
-    if (!ads.begin(ADS1115_I2C_ADDR)) {
+    if (!ads.begin()) {
         return false;
     }
     ads.setGain(GAIN_TWOTHIRDS);

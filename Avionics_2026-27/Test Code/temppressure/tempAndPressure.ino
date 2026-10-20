@@ -1,3 +1,5 @@
+// THIS IS TESTING CODE, NO RFM JUST SERIAL PRINT
+
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_MAX31865.h>
@@ -60,7 +62,7 @@ void loop() {
   float adcVoltage = ads.computeVolts(adcRaw);
   float adcTempC = convertADCToTemp(adcVoltage);
 
-  // ---- Output ----
+  // ---- Output ---- Output to serial monitor
   Serial.print("RTD Temp (C): ");
   Serial.print(rtdTempC, 2);
   Serial.print("   ADC raw: ");
@@ -70,5 +72,5 @@ void loop() {
   Serial.print("   ADC Temp: ");
   Serial.println(adcTempC, 2);
 
-  delay(500); // adjust to your desired sample rate
+  delay(500); // Sample rate of 2 Hz
 }
