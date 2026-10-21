@@ -358,7 +358,7 @@ void loop()
             DisarmDrogueRec = true;
         }
 
-        if (!MainRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM <=1000 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
+        if (!MainRecoveryFired && DrogueRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM <=1000 ) { // use kalman filter altitude instead of sample.baroaAltM  
             Serial.println("Main Recovery Activated"); // add solenoid driver logic here
             rec.DriverActivate(2); // Activate solenoid driver 2
             rec.DriverActivate(3); // Activate solenoid driver 3
