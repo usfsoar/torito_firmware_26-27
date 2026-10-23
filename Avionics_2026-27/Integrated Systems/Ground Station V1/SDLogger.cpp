@@ -153,7 +153,7 @@ bool SDLogger::begin()
     // Add the CSV header if this is a new file
     if (file.size() == 0)
     {
-        file.println("ms,fix,lat,lon,gps_alt_m,speed_kn,sats,baro_alt_m,phi_deg,theta_deg,vert_acc_mps2,rssi_dbm,dist_m");
+        file.println("ms,fix,lat,lon,gps_alt_m,speed_kn,sats,baro_alt_m,phi_deg,theta_deg,vert_acc_mps2,rssi_dbm,dist_m,drogue,main");
         file.sync();
 
         Serial.println("CSV header created.");
@@ -194,7 +194,9 @@ void SDLogger::log(const FlightData &d, int rssi, float dist)
 
     n += snprintf(line + n, sizeof(line) - n, "%d,", rssi);
 
-    addField(line, sizeof(line), n, dist >= 0, dist, 2, false);
+    addField(line, sizeof(line), n, dist >= 0, dist, 2, true);
+
+    n += snprintf(line + n, sizeof(line) - n, "%d,%d", d.drogue ? 1 : 0, d.mainDeployed ? 1 : 0);
 
     if (n + 2 >= sizeof(line))
         return;

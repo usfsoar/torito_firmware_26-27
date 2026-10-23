@@ -22,6 +22,10 @@ struct FlightData
     float phiDeg      = 0;    // roll
     float thetaDeg    = 0;    // pitch
     float vertAccMps2 = 0;    // vertical linear acceleration, 1 g removed
+
+    // ----- Recovery (Range Test) -----
+    bool  drogue = false;     // drogue has fired
+    bool  mainDeployed = false; // main has fired
 };
 
 // Raw sensor values for the SD sensor log (transmitter only).
@@ -34,4 +38,6 @@ struct SensorSample
     float axMg = 0, ayMg = 0, azMg = 0;          // accelerometer
     float gxDps = 0, gyDps = 0, gzDps = 0;       // gyroscope
     float phiDeg = 0, thetaDeg = 0, vertAccMps2 = 0;
+
+    bool  drogue = false, mainDeployed = false;  // recovery state, 0/1 in the log
 };

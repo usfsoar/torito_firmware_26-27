@@ -184,7 +184,7 @@ bool SDLogger::begin()
 
     bool gpsOk    = openChannel(gpsLog,    "gpslog.csv",  "ms,lat,lon,gps_alt_m,speed_kn,sats,fix");
     bool sensorOk = openChannel(sensorLog, "sensors.csv",
-        "ms,baro_alt_m,max_alt_m,pressure_hpa,temp_c,ax_mg,ay_mg,az_mg,gx_dps,gy_dps,gz_dps,phi_deg,theta_deg,vert_acc_mps2");
+        "ms,baro_alt_m,max_alt_m,pressure_hpa,temp_c,ax_mg,ay_mg,az_mg,gx_dps,gy_dps,gz_dps,phi_deg,theta_deg,vert_acc_mps2,drogue,main");
 
     lastFlush = millis();
 
@@ -244,7 +244,9 @@ void SDLogger::logSensors(const SensorSample &s)
 
     addField(line, sizeof(line), n, s.imuValid, s.phiDeg,      2, true);
     addField(line, sizeof(line), n, s.imuValid, s.thetaDeg,    2, true);
-    addField(line, sizeof(line), n, s.imuValid, s.vertAccMps2, 3, false);
+    addField(line, sizeof(line), n, s.imuValid, s.vertAccMps2, 3, true);
+
+    n += snprintf(line + n, sizeof(line) - n, "%d,%d", s.drogue ? 1 : 0, s.mainDeployed ? 1 : 0);
 
     if (n + 2 >= sizeof(line))
         return;

@@ -15,7 +15,8 @@ struct __attribute__((packed)) FlightPacket
     int16_t gps_alt_m;       // GPS altitude, whole meters
     int16_t speed_dkn;       // GPS speed, knots x 10
     uint8_t sats;
-    uint8_t fix;             // 0 = no GPS fix (then lat/lon/gps_alt/speed are not valid)
+    uint8_t fix;             // bits 0-5: GPS fix, 0 = no fix (then lat/lon/gps_alt/speed are not valid)
+                             // bit 6: drogue fired, bit 7: main fired (Range Test)
 
     int32_t baro_alt_cm;     // barometric altitude above power-on, cm
     int16_t phi_cdeg;        // roll, 0.01 degree
@@ -27,6 +28,10 @@ static_assert(sizeof(FlightPacket) == 24, "FlightPacket must be exactly 24 bytes
 
 static const int32_t NO_DATA_I32 = INT32_MIN;
 static const int16_t NO_DATA_I16 = INT16_MIN;
+
+static const uint8_t FIX_MASK       = 0x3F;
+static const uint8_t DROGUE_FLAG    = 0x40;
+static const uint8_t MAIN_FLAG      = 0x80;
 
 // Rounds to the nearest integer (works for negative values too)
 static inline int32_t roundToInt(double v)
@@ -52,7 +57,7 @@ static inline void packFlightData(const FlightData &d, FlightPacket &p)
     p.gps_alt_m = toInt16(d.gpsAltM);
     p.speed_dkn = toInt16((double)d.speedKn * 10.0);
     p.sats      = (uint8_t)d.sats;
-    p.fix       = (uint8_t)d.fix;
+    p.fix       = (uint8_t)(d.fix & FIX_MASK) | (d.drogue ? DROGUE_FLAG : 0) | (d.mainDeployed ? MAIN_FLAG : 0);
 
     p.baro_alt_cm = d.baroValid ? roundToInt((double)d.baroAltM * 100.0) : NO_DATA_I32;
 
@@ -77,7 +82,9 @@ static inline void unpackFlightPacket(const FlightPacket &p, FlightData &d)
     d.gpsAltM = (float)p.gps_alt_m;
     d.speedKn = p.speed_dkn / 10.0f;
     d.sats    = p.sats;
-    d.fix     = p.fix;
+    d.fix     = p.fix & FIX_MASK;
+    d.drogue  = (p.fix & DROGUE_FLAG) != 0;
+    d.mainDeployed = (p.fix & MAIN_FLAG) != 0;
 
     d.baroValid = (p.baro_alt_cm != NO_DATA_I32);
     d.baroAltM  = d.baroValid ? p.baro_alt_cm / 100.0f : 0.0f;
