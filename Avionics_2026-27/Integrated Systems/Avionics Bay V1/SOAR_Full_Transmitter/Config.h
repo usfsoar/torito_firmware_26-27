@@ -76,7 +76,7 @@ const bool TRANSMIT_WITHOUT_GPS_FIX = true;
 #define REG_IRQ_FLAGS  0x12
 #define IRQ_TX_DONE    0x08
 
-const bool ENABLE_FHSS = false;
+const bool ENABLE_FHSS = true;
 
 // ============================================================
 // LOOP SETTINGS

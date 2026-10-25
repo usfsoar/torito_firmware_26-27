@@ -69,6 +69,78 @@ uint32_t packetsFailed = 0;
 // HELPERS
 // ============================================================
 
+// ============================================================
+// RECOVERY STATE PERSISTENCE
+// Saves drogue/main deployment state to SD so a reboot mid-flight
+// does not reset the deployment flags.
+// ============================================================
+
+void saveRecoveryState()
+{
+    SdFs sd2;
+    bool ok = false;
+
+    if (SD_IS_BUILTIN)
+        ok = sd2.begin(SdioConfig(FIFO_SDIO));
+    else
+    {
+        SPI1.begin();
+        ok = sd2.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(SD_SPI_SPEED_MHZ), &SPI1));
+    }
+
+    if (!ok) { Serial.println("saveRecoveryState: SD not available"); return; }
+
+    sd2.remove("recovery.txt");
+    FsFile f = sd2.open("recovery.txt", O_RDWR | O_CREAT);
+    if (!f) { Serial.println("saveRecoveryState: could not open file"); return; }
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "D=%d,M=%d", DrogueRecoveryFired ? 1 : 0, MainRecoveryFired ? 1 : 0);
+    f.print(buf);
+    f.sync();
+    f.close();
+
+    Serial.print("Recovery state saved to SD: ");
+    Serial.println(buf);
+}
+
+void loadRecoveryState()
+{
+    SdFs sd2;
+    bool ok = false;
+
+    if (SD_IS_BUILTIN)
+        ok = sd2.begin(SdioConfig(FIFO_SDIO));
+    else
+    {
+        SPI1.begin();
+        ok = sd2.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(SD_SPI_SPEED_MHZ), &SPI1));
+    }
+
+    if (!ok) return;
+
+    FsFile f = sd2.open("recovery.txt", O_RDONLY);
+    if (!f) { Serial.println("No saved recovery state (first boot)."); return; }
+
+    char buf[16] = {};
+    f.read(buf, sizeof(buf) - 1);
+    f.close();
+
+    int d = 0, m = 0;
+    sscanf(buf, "D=%d,M=%d", &d, &m);
+
+    DrogueRecoveryFired = (d == 1);
+    MainRecoveryFired   = (m == 1);
+
+    if (DrogueRecoveryFired || MainRecoveryFired)
+    {
+        Serial.print("!!! RECOVERY STATE RESTORED: drogue=");
+        Serial.print(DrogueRecoveryFired ? "FIRED" : "not fired");
+        Serial.print("  main=");
+        Serial.println(MainRecoveryFired ? "FIRED" : "not fired");
+    }
+}
+
 void deselectAllMainSpiDevices()
 {
     for (int i = 0; i < SPI_CS_COUNT; i++)
@@ -323,6 +395,7 @@ void setup()
     }
     
     rec.begin();
+    loadRecoveryState();   // restore drogue/main state if rebooted mid-flight
     WDT_timings_t config;
     config.timeout = 5000; // 5 s
     wdt.begin(config);
@@ -355,34 +428,36 @@ void loop()
         updateSensors();
         if (!DrogueRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.maxAltM - sample.baroAltM >= 100 && sample.vertAccMps2 < 0) { // use kalman filter altitude instead of sample.baroaAltM  
             Serial.println("Recovery Activated");
-            Serial.println(">>> DROGUE DEPLOYED"); // add solenoid driver logic here
-            rec.DriverActivate(0); // Activate solenoid driver 0
-            rec.DriverActivate(1); // Activate solenoid driver 1
+            Serial.println(">>> DROGUE DEPLOYED");
+            rec.DriverActivate(N0);   // drogue solenoids
+            rec.DriverActivate(N1);
+            saveRecoveryState();
             lastDrogueRec = millis();
             DrogueRecoveryFired = true;
         }
         
         if (millis() - lastDrogueRec >= 10000 && !MainRecoveryFired && !DisarmDrogueRec) { // 10 seconds after drogue recovery, disarm the drogue solenoids
             Serial.println("Disarming Drogue Recovery Solenoids");
+            rec.DriverDeactivate(N0);
+            rec.DriverDeactivate(N1);
             lastDrogueRec = millis();
-            rec.DriverDeactivate(0); // Deactivate solenoid driver 0
-            rec.DriverDeactivate(1); // Deactivate solenoid driver 1
             DisarmDrogueRec = true;
         }
 
         if (!MainRecoveryFired && DrogueRecoveryFired && computeAverageDeltaAltitude() < -5 && sample.baroAltM <=1000 ) { // use kalman filter altitude instead of sample.baroaAltM  
             Serial.println("Main Recovery Activated");
-            Serial.println(">>> MAIN DEPLOYED"); // add solenoid driver logic here
-            rec.DriverActivate(2); // Activate solenoid driver 2
-            rec.DriverActivate(3); // Activate solenoid driver 3
+            Serial.println(">>> MAIN DEPLOYED");
+            rec.DriverActivate(N2);   // main solenoids
+            rec.DriverActivate(N3);
+            saveRecoveryState();
             lastMainRec = millis();
             MainRecoveryFired = true;
         }
         if (millis() - lastMainRec >= 10000 && !DisarmMainRec) { // 10 seconds after main recovery, disarm the main solenoids
             Serial.println("Disarming Main Recovery Solenoids");
+            rec.DriverDeactivate(N2);
+            rec.DriverDeactivate(N3);
             lastMainRec = millis();
-            rec.DriverDeactivate(2); // Deactivate solenoid driver 2
-            rec.DriverDeactivate(3); // Deactivate solenoid driver 3
             DisarmMainRec = true;
         }
     }

@@ -81,9 +81,9 @@ void printLatest()
     }
     else
     {
-        Serial.print("GPS:         no fix on the rocket (satellites: ");
+        Serial.print("GPS:         NO FIX on the rocket (satellites: ");
         Serial.print(latest.sats);
-        Serial.println(")");
+        Serial.println(") - position not valid, everything else below is still live");
     }
 
     if (latest.baroValid)
@@ -115,6 +115,11 @@ void printLatest()
     {
         Serial.println("IMU:         not available from the rocket");
     }
+
+    Serial.print("Drogue:      ");
+    Serial.println(latest.drogue ? "DEPLOYED (1)" : "not fired (0)");
+    Serial.print("Main:        ");
+    Serial.println(latest.mainDeployed ? "DEPLOYED (1)" : "not fired (0)");
 
     Serial.print("RSSI:        ");
     Serial.print(latestRssi);
