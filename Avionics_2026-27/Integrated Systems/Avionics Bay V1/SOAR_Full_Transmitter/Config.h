@@ -65,7 +65,9 @@ const int SPI_CS_COUNT  = sizeof(SPI_CS_PINS) / sizeof(SPI_CS_PINS[0]);
 // ============================================================
 
 const float RF_FREQUENCY = 433.0;
-const unsigned int TRANSMIT_INTERVAL = 40; // 25 packets/s target
+const uint32_t RADIO_BANDWIDTH_HZ = 500000UL;  // MUST MATCH ON BOTH RADIOS
+const uint8_t SOAR_TARGET_HZ = 50;             // 50 Hz attempt target (not guaranteed throughput)
+const unsigned int TRANSMIT_INTERVAL = 1000U / SOAR_TARGET_HZ; // 20ms for 50Hz
 
 // true  = send packets even without a GPS fix (the sensor data is still useful;
 //         the packet's fix field tells the ground station the GPS is not valid)
@@ -76,7 +78,7 @@ const bool TRANSMIT_WITHOUT_GPS_FIX = true;
 #define REG_IRQ_FLAGS  0x12
 #define IRQ_TX_DONE    0x08
 
-const bool ENABLE_FHSS = true;
+const bool ENABLE_FHSS = false;
 
 // ============================================================
 // LOOP SETTINGS
@@ -84,3 +86,14 @@ const bool ENABLE_FHSS = true;
 
 const uint32_t SENSOR_READ_INTERVAL_MS = 100;   // 10 Hz sensors
 const uint32_t PRINT_INTERVAL_MS       = 1000;  // Serial Monitor status, once a second
+
+// ============================================================
+// BENCH-ONLY RECOVERY DECISION SIMULATION
+// These are draft thresholds from the original source, NOT flight-qualified.
+// No physical solenoid outputs are permitted by this build.
+// ============================================================
+const float SIM_DROGUE_DROP_M = 0.0f; // flowchart correction: peak-current > 0 (SIMULATION ONLY)
+const float SIM_DESCENT_VEL_MPS = -5.0f;
+const float SIM_MAIN_ALTITUDE_M = 1000.0f;
+const uint32_t SIM_PULSE_MS = 10000UL;
+const uint32_t IMU_MAX_SAMPLE_AGE_MS = 250UL;

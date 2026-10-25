@@ -159,6 +159,13 @@ bool SDLogger::begin()
         Serial.println("CSV header created.");
     }
 
+    linkFile=sd.open("rx_link_packets.csv", O_RDWR | O_CREAT | O_AT_END);
+    linkOk=(bool)linkFile;
+    if (linkOk && linkFile.size()==0) {
+        linkFile.println("ms,session_id,tx_sequence,rx_unique_total,rssi_dbm");
+        linkFile.sync();
+    }
+    if (!linkOk) Serial.println("WARNING: rx_link_packets.csv unavailable");
     lastFlush = millis();
     ok = true;
 
@@ -216,8 +223,47 @@ void SDLogger::log(const FlightData &d, int rssi, float dist)
 
 void SDLogger::service()
 {
-    if (ok && idx > 0 && millis() - lastFlush >= LOG_FLUSH_MS)
-    {
-        flushBuffer();
+    if (millis() - lastFlush >= LOG_FLUSH_MS) {
+        if (ok && idx > 0) flushBuffer();
+        if (linkOk && linkIdx > 0) flushLink();
+        lastFlush = millis();
     }
+}
+
+bool SDLogger::flushLink() {
+    if (!linkOk) return false;
+    if (!linkIdx) return true;
+    const size_t written=linkFile.write(reinterpret_cast<const uint8_t*>(linkBuf),linkIdx);
+    const bool saved=written==linkIdx && linkFile.sync();
+    if (!saved) Serial.println("WARNING: rx_link_packets.csv write/sync failed");
+    linkIdx=0;
+    return saved;
+}
+void SDLogger::logLinkPacket(uint32_t session, uint32_t sequence,
+                             uint32_t received, int rssi) {
+    if (!linkOk) return;
+    char line[112];
+    const int n=snprintf(line,sizeof(line),"%lu,%lu,%lu,%lu,%d\n",
+        (unsigned long)millis(),(unsigned long)session,
+        (unsigned long)sequence,(unsigned long)received,rssi);
+    if (n<=0 || n>=(int)sizeof(line)) return;
+    if (linkIdx+(size_t)n>BUF_SIZE) flushLink();
+    memcpy(linkBuf+linkIdx,line,n); linkIdx+=(size_t)n;
+}
+bool SDLogger::saveLinkSummary(uint32_t session, uint32_t txAttempts,
+                                uint32_t txCompleted, uint32_t txFailed,
+                                uint32_t rxUnique, uint32_t duplicates) {
+    if (!ok) return false;
+    flushBuffer(); flushLink();
+    FsFile out=sd.open("rx_link_summary.csv",O_RDWR | O_CREAT | O_AT_END);
+    if (!out) return false;
+    if (out.size()==0)
+        out.println("ms,session_id,tx_attempts,tx_done,tx_failed,rx_unique,lost,duplicates,delivery_percent");
+    const uint32_t loss=(txAttempts>=rxUnique ? txAttempts-rxUnique : 0);
+    const double rate=txAttempts ? (100.0*(double)rxUnique/txAttempts) : 0.0;
+    const int n=out.printf("%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%.3f\n",
+        (unsigned long)millis(),(unsigned long)session,(unsigned long)txAttempts,
+        (unsigned long)txCompleted,(unsigned long)txFailed,(unsigned long)rxUnique,
+        (unsigned long)loss,(unsigned long)duplicates,rate);
+    const bool saved=n>0 && out.sync();out.close();return saved;
 }

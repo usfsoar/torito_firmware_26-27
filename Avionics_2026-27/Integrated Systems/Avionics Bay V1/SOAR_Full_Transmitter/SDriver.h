@@ -1,3 +1,4 @@
+#pragma once
 #include <Adafruit_MCP23X17.h>
 
 class SDriver {
@@ -9,6 +10,7 @@ class SDriver {
 
     private:
         Adafruit_MCP23X17 mcp;
+        bool mcpFound = false;
         #define N0 0
         #define N1 1
         #define N2 2

@@ -2,9 +2,10 @@
 #include <Arduino.h>
 #include "FlightData.h"
 
-// Radio packet, 24 bytes. MUST be IDENTICAL on transmitter and receiver.
-// (Keeping it at 24 bytes leaves room for 25 packets per second at
-//  250 kHz bandwidth / SF7. Bigger packets take longer to send.)
+// Radio packet, 32 bytes. MUST be IDENTICAL on transmitter and receiver.
+// NEW LINK TEST v2: older 24-byte receiver/transmitter sketches are INCOMPATIBLE.
+// (32 bytes of app payload (+ RadioHead headers); target 50 Hz at
+//  500 kHz bandwidth / SF7. Measured rate may be lower.)
 //
 // A value that is not available is sent as the "no data" marker
 // (-32768 for 16-bit fields, -2147483648 for 32-bit fields).
@@ -22,9 +23,11 @@ struct __attribute__((packed)) FlightPacket
     int16_t phi_cdeg;        // roll, 0.01 degree
     int16_t theta_cdeg;      // pitch, 0.01 degree
     int16_t vert_acc_cms2;   // vertical linear acceleration, 0.01 m/s^2
+    uint32_t session_id;     // identifies one transmitter counter session
+    uint32_t tx_sequence;    // starts at 1; increments for EVERY attempted telemetry send
 };
 
-static_assert(sizeof(FlightPacket) == 24, "FlightPacket must be exactly 24 bytes");
+static_assert(sizeof(FlightPacket) == 32, "FlightPacket must be exactly 32 bytes");
 
 static const int32_t NO_DATA_I32 = INT32_MIN;
 static const int16_t NO_DATA_I16 = INT16_MIN;

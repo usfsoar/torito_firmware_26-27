@@ -41,74 +41,85 @@ bool RadioTransmitter::begin()
     Serial.println(" MHz");
 
     radio.setTxPower(17, false);
-    radio.setSignalBandwidth(250000);
+    radio.setSignalBandwidth(RADIO_BANDWIDTH_HZ);
     radio.setSpreadingFactor(7);
-
-    Serial.println("TX power: 17 dBm");
-    Serial.println("Bandwidth: 250 kHz");
-    Serial.println("Spreading Factor: 7");
+    radio.setCodingRate4(5);
+    radio.setPayloadCRC(true);
+    radio.setPreambleLength(8);
 
     if (ENABLE_FHSS)
-    {
-        uint8_t hopPeriodSymbols = 0x1A;
-        radio.spiWrite(REG_HOP_PERIOD, hopPeriodSymbols);
-
-        Serial.println("FHSS ENABLED.");
-    }
+        radio.spiWrite(REG_HOP_PERIOD, 0x1A);
     else
-    {
-        Serial.println("FHSS disabled.");
-    }
+        radio.spiWrite(REG_HOP_PERIOD, 0x00);
+
+    Serial.print("TX radio version (usually 0x12): 0x");
+    Serial.println(radio.spiRead(RH_RF95_REG_42_VERSION), HEX);
+    Serial.print("TX radio config [1D/1E/26] = 0x");
+    Serial.print(radio.spiRead(RH_RF95_REG_1D_MODEM_CONFIG1), HEX);
+    Serial.print(" / 0x");
+    Serial.print(radio.spiRead(RH_RF95_REG_1E_MODEM_CONFIG2), HEX);
+    Serial.print(" / 0x");
+    Serial.println(radio.spiRead(RH_RF95_REG_26_MODEM_CONFIG3), HEX);
+    Serial.print("TX: ");
+    Serial.print(RF_FREQUENCY, 3);
+    Serial.print(" MHz; BW="); Serial.print(RADIO_BANDWIDTH_HZ / 1000U);
+    Serial.println("kHz SF=7 CR=4/5 CRC=ON; 32-byte BINARY frames");
 
     // Transmit-only mode: don't depend on the RadioHead interrupt.
     detachInterrupt(digitalPinToInterrupt(RFM96W_INT_PIN));
     pinMode(RFM96W_INT_PIN, INPUT);
 
-    Serial.println("RADIO READY.");
+    radio.spiWrite(REG_IRQ_FLAGS, 0xFF);
+    radio.setModeRx();  // Must hear ground commands even while bay is OFF.
+    Serial.println("RADIO READY: waiting for commands in RX mode.");
     Serial.println("==========================================");
 
     return true;
 }
 
-bool RadioTransmitter::transmit(const FlightData &data)
-{
-    FlightPacket pkt;
-    packFlightData(data, pkt);
+bool RadioTransmitter::transmit(const FlightData &data, uint32_t session, uint32_t sequence) {
+    FlightPacket packet = {};
+    packFlightData(data, packet);
+    packet.session_id=session;
+    packet.tx_sequence=sequence;
+    return sendRaw(reinterpret_cast<const uint8_t*>(&packet), sizeof(packet));
+}
 
-    // Clear old IRQ flags
+bool RadioTransmitter::sendRaw(const uint8_t *data, uint8_t len) {
     radio.spiWrite(REG_IRQ_FLAGS, 0xFF);
-
-    bool sent = radio.send((uint8_t *)&pkt, sizeof(pkt));
-
+    bool sent = radio.send(data, len);
     bool done = false;
-    unsigned long start = millis();
-
-    // Wait maximum 200 ms for the radio's TX done flag
-    while (millis() - start < 200)
-    {
-        uint8_t flags = radio.spiRead(REG_IRQ_FLAGS);
-
-        if (flags & IRQ_TX_DONE)
-        {
-            done = true;
-            break;
-        }
+    const uint32_t start=millis();
+    while (sent && (uint32_t)(millis()-start) < 250UL) {
+        if (radio.spiRead(REG_IRQ_FLAGS) & IRQ_TX_DONE) { done=true; break; }
     }
-
-    // Clear IRQ flags again
     radio.spiWrite(REG_IRQ_FLAGS, 0xFF);
-
-    radio.setModeIdle();
-
-    if (!sent)
-    {
-        Serial.println("ERROR: radio.send() returned false");
-    }
-
-    if (!done)
-    {
-        Serial.println("WARNING: Radio TX Done flag timeout");
-    }
-
+    radio.setModeRx();            // Half-duplex: listen between telemetry packets.
+    if (!sent || !done) Serial.println("WARNING: LoRa TX failed or TX_DONE timeout");
     return sent && done;
+}
+
+bool RadioTransmitter::receiveControl(ControlPacket &out) {
+    if (!radio.available()) {
+        const uint8_t flags = radio.spiRead(RH_RF95_REG_12_IRQ_FLAGS);
+        if (flags & (RH_RF95_RX_DONE | RH_RF95_PAYLOAD_CRC_ERROR | RH_RF95_RX_TIMEOUT))
+            radio.servicePendingIrq();
+    }
+    if (!radio.available()) return false;
+    uint8_t data[RH_RF95_MAX_MESSAGE_LEN];
+    uint8_t len=sizeof(data);
+    if (!radio.recv(data,&len)) { radio.setModeRx(); return false; }
+    radio.setModeRx();
+    if (len != sizeof(ControlPacket)) return false;
+    memcpy(&out,data,sizeof(out));
+    return soarControlValid(out) && (out.type==SOAR_CONTROL_SET || out.type==SOAR_CONTROL_END);
+}
+
+bool RadioTransmitter::acknowledge(const ControlPacket &command, bool actualEnabled, bool saved) {
+    const ControlPacket ack=soarControl(SOAR_CONTROL_ACK,command.sequence,actualEnabled,saved);
+    return sendRaw(reinterpret_cast<const uint8_t*>(&ack), sizeof(ack));
+}
+
+bool RadioTransmitter::reportStats(const LinkStatsPacket &stats) {
+    return sendRaw(reinterpret_cast<const uint8_t*>(&stats),sizeof(stats));
 }

@@ -36,6 +36,8 @@ const uint32_t LOG_FLUSH_MS = 1000;
 // ============================================================
 
 const float RF_FREQUENCY = 433.0;
+const uint32_t RADIO_BANDWIDTH_HZ = 500000UL;  // MUST MATCH ON BOTH RADIOS
+const uint8_t SOAR_TARGET_HZ = 50;             // 50 Hz attempt target (not guaranteed throughput)
 
 #define REG_HOP_PERIOD 0x24
 
