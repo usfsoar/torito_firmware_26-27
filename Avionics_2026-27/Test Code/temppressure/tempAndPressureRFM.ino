@@ -23,8 +23,8 @@ const uint8_t ADS_CHANNEL = 0;     // pressure signal on A0
 #define RFM_RST_PIN  3
 #define RFM_INT_NUM  digitalPinToInterrupt(RFM_INT_PIN)
 
-#define RF_FREQ_MHZ     915.0
-#define RF_TX_POWER_DBM 13
+#define RF_FREQ_MHZ     500
+#define RF_TX_POWER_DBM 20
 
 // Standard Teensy 4.1 SPI1 pins:
 // MISO1 = 1, MOSI1 = 26, SCK1 = 27
@@ -140,5 +140,4 @@ void loop() {
   }
 
   seqNum++;
-  delay(500);
 }
