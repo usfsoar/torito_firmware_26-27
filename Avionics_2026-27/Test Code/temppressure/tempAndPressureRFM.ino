@@ -36,6 +36,21 @@ RH_RF95 rf95(RFM_CS_PIN, RFM_INT_NUM, hardware_spi1);
 
 uint32_t seqNum = 0;
 
+struct __attribute__((packed)) TelemetryPacket {
+  uint32_t seqNum;
+  uint32_t timeMs;
+  float rtdTempC;
+  uint8_t fault;
+  int16_t adcRaw;
+  float adcVoltage;
+  float pressurePsi;
+  float pressureKPa;
+};
+
+static_assert(sizeof(float) == 4, "Telemetry requires 32-bit floats");
+static_assert(sizeof(TelemetryPacket) <= RH_RF95_MAX_MESSAGE_LEN,
+              "Telemetry packet exceeds the RFM95 payload limit");
+
 // Pressure sensor: linear, 0-4.5 V = 0-10000 psi
 float convertADCToPressure_psi(float voltage) {
   const float P_MAX = 10000.0;
@@ -116,27 +131,41 @@ void loop() {
   float pressurePsi = convertADCToPressure_psi(adcVoltage);
   float pressureKPa = pressurePsi * 6.894757;
 
-  // ---- Build CSV packet ----
-  char pkt[RH_RF95_MAX_MESSAGE_LEN];
-  int n = snprintf(pkt, sizeof(pkt),
+  // ---- Build binary radio packet ----
+  TelemetryPacket packet = {
+    seqNum,
+    millis(),
+    rtdTempC,
+    fault,
+    adcRaw,
+    adcVoltage,
+    pressurePsi,
+    pressureKPa
+  };
+
+  // Keep the serial monitor output human-readable; only the radio payload is binary.
+  char csv[RH_RF95_MAX_MESSAGE_LEN];
+  int n = snprintf(csv, sizeof(csv),
                    "%lu,%lu,%.2f,%u,%d,%.4f,%.1f,%.1f",
-                   (unsigned long)seqNum,
-                   (unsigned long)millis(),
-                   rtdTempC,
-                   (unsigned)fault,
-                   (int)adcRaw,
-                   adcVoltage,
-                   pressurePsi,
-                   pressureKPa);
+                   (unsigned long)packet.seqNum,
+                   (unsigned long)packet.timeMs,
+                   packet.rtdTempC,
+                   (unsigned)packet.fault,
+                   (int)packet.adcRaw,
+                   packet.adcVoltage,
+                   packet.pressurePsi,
+                   packet.pressureKPa);
 
-  if (n > 0 && n < (int)sizeof(pkt)) {
-    Serial.println(pkt);
+  if (n >= 0 && n < (int)sizeof(csv)) {
+    Serial.println(csv);
+  } else {
+    Serial.println("CSV debug output formatting failed");
+  }
 
-    if (rf95.send((uint8_t*)pkt, (uint8_t)n)) {
-      rf95.waitPacketSent();
-    } else {
-      Serial.println("RFM send failed");
-    }
+  if (rf95.send((uint8_t*)&packet, (uint8_t)sizeof(packet))) {
+    rf95.waitPacketSent();
+  } else {
+    Serial.println("RFM send failed");
   }
 
   seqNum++;
