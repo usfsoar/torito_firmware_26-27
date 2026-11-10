@@ -32,12 +32,22 @@ Serial monitor (baud **115200** for all environments in this project):
 pio device monitor -b 115200
 ```
 
+## Battery monitor build mode
+
+The Teensy battery monitor streams CSV over Serial. Packet support is included by default. To omit packet encoding/decoding code, add this under `[env:teensy]` in `platformio.ini`:
+
+```ini
+build_flags = -DBATTERY_SERIAL_ONLY
+```
+
+This is a compile-time option; it does not configure the Serial monitor. To build packet-only helpers without the INA228 hardware driver, use `-DBATTERY_PACKET_ONLY` instead.
+
 ## Project layout
 
 | Path | Role |
 |------|------|
 | [`platformio.ini`](../../platformio.ini) | Environments, board, `build_src_filter`, ports |
-| [`src/teensy/`](../../src/teensy) | Teensy-only `main.cpp` |
+| [`src/teensy/`](../../src/teensy) | Teensy battery monitor and application entry point |
 | [`src/gscesp/`](../../src/gscesp) | GSC ESP-only `main.cpp` |
 | [`src/tsesp/`](../../src/tsesp) | Torito relay ESP-only `main.cpp` |
 | [`lib/`](../../lib) | Project libraries (DAQ, LoRa, SD, etc.) |
