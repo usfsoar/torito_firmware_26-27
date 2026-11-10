@@ -1,4 +1,5 @@
 #include "BatteryMonitor.h"
+#include <Wire.h> // Make sure this is included
 
 namespace {
 
@@ -34,6 +35,8 @@ void reportError(const char *message, uint32_t nowMs) {
 void setup() {
     Serial.begin(115200);
     Serial.println("# INA228 battery monitor");
+    Wire.begin(); // Initializes the default I2C pins 18 and 19
+    battery.begin(BatteryMonitorConfig(), Wire); // Pass the default Wire instance
 
     lastInitAttemptMs = millis();
     if (battery.begin()) {

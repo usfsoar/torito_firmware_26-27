@@ -153,7 +153,7 @@ size_t      batteryFormatCsv(const BatteryData &d, char *buf, size_t len);   // 
 // 10 A) at I2C address 0x41 (A0 jumper closed).
 // ---------------------------------------------------------------------------
 struct BatteryMonitorConfig {
-    uint8_t  i2cAddr       = 0x41;
+    uint8_t  i2cAddr       = 0x40;
     float    shuntOhms     = 0.015f;   // external shunt? put its value here
     float    maxCurrentA   = 10.0f;    // largest current you expect; sets resolution
     bool     invertCurrent = false;    // true if discharge reads negative
