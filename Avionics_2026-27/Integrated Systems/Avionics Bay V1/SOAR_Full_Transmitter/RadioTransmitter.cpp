@@ -42,7 +42,7 @@ bool RadioTransmitter::begin()
 
     radio.setTxPower(17, false);
     radio.setSignalBandwidth(RADIO_BANDWIDTH_HZ);
-    radio.setSpreadingFactor(7);
+    radio.setSpreadingFactor(8);
     radio.setCodingRate4(5);
     radio.setPayloadCRC(true);
     radio.setPreambleLength(8);
@@ -63,7 +63,7 @@ bool RadioTransmitter::begin()
     Serial.print("TX: ");
     Serial.print(RF_FREQUENCY, 3);
     Serial.print(" MHz; BW="); Serial.print(RADIO_BANDWIDTH_HZ / 1000U);
-    Serial.println("kHz SF=7 CR=4/5 CRC=ON; 32-byte BINARY frames");
+    Serial.println("kHz SF=8 CR=4/5 CRC=ON; 32-byte BINARY frames");
 
     // Transmit-only mode: don't depend on the RadioHead interrupt.
     detachInterrupt(digitalPinToInterrupt(RFM96W_INT_PIN));

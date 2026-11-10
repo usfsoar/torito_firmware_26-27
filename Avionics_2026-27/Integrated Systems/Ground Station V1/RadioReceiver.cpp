@@ -28,7 +28,7 @@ bool RadioReceiver::begin()
 
     if (!radio.setFrequency(RF_FREQUENCY)) return false;
     radio.setSignalBandwidth(RADIO_BANDWIDTH_HZ);
-    radio.setSpreadingFactor(7);
+    radio.setSpreadingFactor(8);
     radio.setCodingRate4(5);
     radio.setPayloadCRC(true);
     radio.setPreambleLength(8);
@@ -53,7 +53,7 @@ bool RadioReceiver::begin()
     Serial.print("RX: listening at ");
     Serial.print(RF_FREQUENCY, 3);
     Serial.print(" MHz; BW="); Serial.print(RADIO_BANDWIDTH_HZ / 1000U);
-    Serial.println("kHz SF=7 CR=4/5 CRC=ON; IRQ POLLING; 32-byte BINARY frames");
+    Serial.println("kHz SF=8 CR=4/5 CRC=ON; IRQ POLLING; 32-byte BINARY frames");
     Serial.println("RX: DIO0 pin is not needed by this polling version.");
     Serial.print("RX expected frame bytes: Flight="); Serial.print(sizeof(FlightPacket));
     Serial.print(" Control="); Serial.print(sizeof(ControlPacket));
