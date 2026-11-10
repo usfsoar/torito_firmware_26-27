@@ -12,7 +12,11 @@ void GPSReader::begin()
 
     gps.begin(GPS_BAUD_RATE);
     gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-    gps.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
+    // Adafruit PA1010D Mini GPS, UART on Teensy Serial2 (GPS TXO->pin 7 RX2,
+    // GPS RXI->pin 8 TX2). Keep RMC+GGA for position, speed, altitude, sats.
+    // At 9600 baud, 5 Hz RMC+GGA is supported; 10 Hz needs RMC-only,
+    // which would lose the GGA altitude/satellite information.
+    gps.sendCommand(PMTK_SET_NMEA_UPDATE_5HZ);
 
     Serial.println("GPS started.");
 }

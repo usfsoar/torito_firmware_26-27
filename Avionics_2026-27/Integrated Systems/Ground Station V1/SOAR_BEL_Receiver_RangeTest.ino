@@ -43,7 +43,7 @@ bool lastReportValid=false;
 LinkStatsPacket lastReport={};
 
 // ASCII '1'/'0' typed in Arduino IDE Serial Monitor are sent as LoRa commands.
-// ACK must match both sequence and requested state AND confirm SD save.
+// ACK must match both sequence and requested state AND confirm EEPROM save.
 uint16_t commandSequence=0;
 bool commandPending=false;
 uint8_t requestedBayState=0;
@@ -105,7 +105,7 @@ void handleControlAck(const ControlPacket &ack) {
         return;
     }
     Serial.print("CONFIRMED: AVBAY="); Serial.print(ack.enabled);
-    Serial.println(" (saved on bay SD card; survives restart)");
+    Serial.println(" (saved in bay EEPROM; survives restart)");
     commandPending=false;
     if (ack.enabled && lastReportValid)
         Serial.println("Note: prior END report belongs to previous test; new session starts at TX.");
@@ -259,7 +259,7 @@ void setup()
     while (!Serial && millis() - serialStart < 2000)
         delay(10);
 
-    Serial.println("SOAR USF - Range Test Receiver / 50 Hz TEST V4");
+    Serial.println("SOAR USF - Range Test Receiver / 50 Hz TEST V3");
     Serial.print("RF: "); Serial.print(RF_FREQUENCY,1); Serial.print(" MHz / ");
     Serial.print(RADIO_BANDWIDTH_HZ/1000U); Serial.print(" kHz / SF7 / target ");
     Serial.print(SOAR_TARGET_HZ); Serial.println(" Hz (actual RX Hz below)");

@@ -11,7 +11,10 @@ const int RFM96W_CS_PIN  = 40;
 const int RFM96W_RST_PIN = 9;
 const int RFM96W_INT_PIN = 2;
 
-// ----- GPS -----
+// ----- GPS (Adafruit PA1010D Mini GPS via UART Serial2) -----
+// GPS TXO -> Teensy pin 7 RX2; GPS RXI -> Teensy pin 8 TX2.
+// GPS VIN -> 3-5V (5V shown on schematic), GPS GND -> common GND.
+// WAKE / PPS / RST / SDA / SCL unused for this UART interface.
 // Serial2 on Teensy 4.1: RX2 = pin 7, TX2 = pin 8
 const unsigned int GPS_BAUD_RATE = 9600;
 
@@ -64,8 +67,8 @@ const int SPI_CS_COUNT  = sizeof(SPI_CS_PINS) / sizeof(SPI_CS_PINS[0]);
 // RADIO SETTINGS
 // ============================================================
 
-const float RF_FREQUENCY = 433.0;
-const uint32_t RADIO_BANDWIDTH_HZ = 125000UL;  // MUST MATCH ON BOTH RADIOS
+const float RF_FREQUENCY = 433.30;
+const uint32_t RADIO_BANDWIDTH_HZ = 500000UL;  // MUST MATCH ON BOTH RADIOS
 const uint8_t SOAR_TARGET_HZ = 50;             // 50 Hz attempt target (not guaranteed throughput)
 const unsigned int TRANSMIT_INTERVAL = 1000U / SOAR_TARGET_HZ; // 20ms for 50Hz
 
@@ -78,7 +81,7 @@ const bool TRANSMIT_WITHOUT_GPS_FIX = true;
 #define REG_IRQ_FLAGS  0x12
 #define IRQ_TX_DONE    0x08
 
-const bool ENABLE_FHSS = true;
+const bool ENABLE_FHSS = true; // experimental; requires both radios to service hop IRQ
 
 // ============================================================
 // LOOP SETTINGS

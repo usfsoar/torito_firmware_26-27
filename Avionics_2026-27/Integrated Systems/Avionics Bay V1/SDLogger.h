@@ -9,14 +9,7 @@
 class SDLogger
 {
 public:
-    bool begin(); // Mount SD then start logging; compatibility helper.
-    bool mount(); // Call at boot while software is OFF; creates no CSV files.
-    bool beginLogging(); // Call after validated 1 or saved enabled-state=1.
-    // Persistent software-enable state. Uses the SAME mounted SD filesystem as
-    // the logger (not EEPROM and not inferred from CSV log existence).
-    bool cardReady() const { return cardOk; }
-    bool readEnableRecord(uint8_t slot, uint8_t *out, size_t length);
-    bool writeEnableRecord(uint8_t slot, const uint8_t *data, size_t length);
+    bool begin();
 
     void logGps(const FlightData &d);
     void logSensors(const SensorSample &s);
@@ -57,7 +50,6 @@ private:
 
     uint32_t lastFlush = 0;
     bool     cardOk    = false;
-    bool     loggingStarted = false;
 
     bool openChannel(Channel &c, const char *name, const char *header);
     void append(Channel &c, const char *line, int n);
