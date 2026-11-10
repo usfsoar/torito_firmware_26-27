@@ -17,7 +17,7 @@ struct __attribute__((packed)) ControlPacket {
     uint8_t type;
     uint16_t sequence;
     uint8_t enabled;    // SET: requested 0/1; ACK: actual 0/1
-    uint8_t persisted;  // ACK: 1 only after successful SD save/readback
+    uint8_t persisted;  // ACK: 1 only after successful EEPROM save/readback
     uint16_t crc;
 };
 static_assert(sizeof(ControlPacket) == 12, "Control packet size mismatch");

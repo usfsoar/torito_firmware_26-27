@@ -1,6 +1,7 @@
 // ============================================================
 // SOAR BEL: RAW-ALTITUDE bench recovery + Kalman telemetry + LoRa
-// No recovery hardware is initialized, enabled or commanded by this build.
+// Automatic recovery hardware is never enabled/commanded by this build.
+// An optional USB-only MCP23017 relay-output bench test is OFF by default.
 // This link test uses matching 32-byte telemetry packets on BOTH boards.
 // ============================================================
 #include <Adafruit_GPS.h>
@@ -28,8 +29,12 @@
 #include "RawBaroVelocity.h"
 #include "AvBayEnableState.h"
 #include "BenchSolenoidMonitor.h"
-// Hardware SDriver remains deliberately uninstantiated.
-// All output changes below are virtual; MCP23017 pins never change.
+#include "RelayBenchConfig.h"
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+#include "SDriver.h"
+#endif
+// The autonomous recovery simulation is ALWAYS virtual. No automated
+// drogue/main result can ever energize physical relay outputs in this build.
 
 WDT_T4<WDT3> wdt;
 SDLogger sdLogger;
@@ -45,6 +50,37 @@ BenchSolenoidMonitor solenoidBench;
 SensorSample sample;
 AvBayEnableState avBayState;
 bool servicesStarted=false;
+
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+SDriver optionalRelay;
+int relayPulseChannel = -1;
+uint32_t relayPulseStartedMs = 0;
+
+void stopRelayBenchPulse() {
+    if (relayPulseChannel >= 0) optionalRelay.DriverDeactivate(relayPulseChannel);
+    relayPulseChannel = -1;
+    optionalRelay.deactivateAll();
+}
+void serviceRelayBenchPulse() {
+    if (relayPulseChannel >= 0 &&
+        (uint32_t)(millis() - relayPulseStartedMs) >= BEL_RELAY_BENCH_PULSE_MS) {
+        stopRelayBenchPulse();
+        Serial.println("OPTIONAL MCP23017: manual test pulse ended; outputs inactive.");
+    }
+}
+void startRelayBenchPulse(int ch) {
+    stopRelayBenchPulse();
+    if (!optionalRelay.available()) {
+        Serial.println("OPTIONAL MCP23017 absent: no relay action; normal telemetry unaffected.");
+        return;
+    }
+    optionalRelay.DriverActivate(ch);
+    relayPulseChannel = ch;
+    relayPulseStartedMs = millis();
+    Serial.print("OPTIONAL MCP23017: USB-only short BENCH pulse on channel ");
+    Serial.println(ch);
+}
+#endif
 
 uint32_t lastTransmitTime = 0, lastSensorRead = 0, lastPrint = 0;
 uint32_t lastFreshImuMs = 0, lastOrientMs = 0, lastKalmanMs = 0;
@@ -322,7 +358,7 @@ void printStatus(uint32_t rateWindowMs)
     Serial.print(" pulses d/m="); Serial.print(recovery.droguePulseActive());
     Serial.print("/"); Serial.println(recovery.mainPulseActive());
     printBenchChannels();
-    Serial.println("PHYSICAL SOLENOID OUTPUTS DISABLED -- VIRTUAL CHANNELS ONLY");
+    Serial.println("AUTOMATIC PHYSICAL DEPLOYMENT OUTPUTS DISABLED -- VIRTUAL RECOVERY ONLY");
     Serial.println("========================================");
 
     packetsSentOk     = 0;
@@ -348,6 +384,9 @@ void handleUsbBenchCommands() {
                 Serial.println(ok ? "Sim flags reset and saved." : "Sim reset in RAM; no SD persistence!");
             } else if (strcmp(cmd, "HELP") == 0) {
                 Serial.println("USB bench commands: HELP, RESET_SIM, RF?, STATE?, CHANNELS?");
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+                Serial.println("OPTIONAL RELAY (NO LOADS): RELAY_PULSE 0..7, RELAY_OFF");
+#endif
             } else if (strcmp(cmd, "CHANNELS?") == 0) {
                 printBenchChannels();
             } else if (strcmp(cmd, "STATE?") == 0) {
@@ -356,6 +395,14 @@ void handleUsbBenchCommands() {
                 Serial.print("RF FIXED: 433 MHz BW "); Serial.print(RADIO_BANDWIDTH_HZ / 1000U);
                 Serial.print(" kHz SF7 CR4/5 CRC ON; target "); Serial.print(SOAR_TARGET_HZ);
                 Serial.println(" Hz, 17 dBm");
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+            } else if (strcmp(cmd, "RELAY_OFF") == 0) {
+                stopRelayBenchPulse();
+                Serial.println("OPTIONAL MCP23017: all outputs inactive.");
+            } else if (strncmp(cmd, "RELAY_PULSE ", 12) == 0 &&
+                       cmd[12] >= '0' && cmd[12] <= '7' && cmd[13] == '\0') {
+                startRelayBenchPulse(cmd[12] - '0');
+#endif
             } else if (len) {
                 Serial.println("Unknown USB command; type HELP.");
             }
@@ -376,8 +423,8 @@ void startActiveServices() {
     Serial.print("MS5607: "); Serial.println(altOk ? "OK" : "FAILED");
     deselectAllMainSpiDevices();
     gpsReader.begin();
-    const bool logsReady=sdLogger.beginLogging();
-    Serial.println(logsReady ? "SD logging started" : "WARNING: SD log channels unavailable");
+    bool sdOk=sdLogger.begin();
+    Serial.println(sdOk ? "SD logger initialized" : "SD absent -- streaming can continue");
     bool d=false,m=false;
     if (sdLogger.loadSimState(d,m)) {
         recovery.restoreSimulatedFlags(d,m);
@@ -412,9 +459,6 @@ void handleAirCommands() {
     if (cmd.type != SOAR_CONTROL_SET) return;
     const bool request=cmd.enabled != 0;
     const bool saved=avBayState.setEnabled(request);
-    // A failed write of OFF should still pause the currently running software.
-    // The ACK truthfully says persisted=NO; old SD state may resume on reboot.
-    if (!saved && !request) avBayState.disableVolatile();
     const bool actual=avBayState.enabled();
     Serial.print("AIR COMMAND "); Serial.print(request ? 1 : 0);
     Serial.print(" seq="); Serial.print(cmd.sequence);
@@ -426,6 +470,9 @@ void handleAirCommands() {
     if (actual && !servicesStarted) startActiveServices();
     if (!actual) {
         if (solenoidBench.forceOff()) printBenchChannels();
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+        stopRelayBenchPulse(); // A remote pause can never leave a test relay active.
+#endif
     }
     if (!actual && servicesStarted) {
         sdLogger.flushNow();
@@ -436,42 +483,43 @@ void handleAirCommands() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("SOAR BEL -- 50 Hz TARGET V4 / SD ENABLE RESUME / BENCH ONLY");
+    Serial.println("SOAR BEL -- 50 Hz TARGET V3 / RAW BARO RECOVERY SIM / BENCH ONLY");
     Serial.println("50 Hz target (20ms schedule), 500 kHz BW. Receiver must match.");
-    Serial.println("Recovery solenoid hardware outputs are NOT controlled by this build.");
+    Serial.println("Automatic recovery solenoid outputs are NOT controlled by this build.");
     solenoidBench.forceOff();
     printBenchChannels();
     deselectAllMainSpiDevices();
     SPI.begin();
     delay(100);
+    if (!avBayState.begin()) Serial.println("ERROR: persistent EEPROM state unavailable. Remain DISABLED.");
     if (!transmitter.begin()) {
         Serial.println("FATAL: RFM96W initialization failed. Check 3.3V SPI CS IRQ and reset.");
         while (1) delay(1000);
     }
-    // Mount once at boot, even when software services are disabled, so the
-    // next 1/0 command can be checkpointed and a reboot can restore it.
-    // The logger itself shares this mounted SdFs instance with the state store.
-    sdLogger.mount();
-    if (!sdLogger.cardReady())
-        Serial.println("AVBAY: SD unavailable: start DISABLED; command 1 will be rejected.");
-
-    if (!avBayState.begin(sdLogger))
-        Serial.println("AVBAY: persistent SD state unavailable. Remain DISABLED.");
     WDT_timings_t conf;
     conf.timeout=5000;
     wdt.begin(conf);
-    Serial.print("AVBAY restored from SD = ");
+    Serial.print("AVBAY restored state = ");
     Serial.println(avBayState.enabled() ? "1 (ENABLED)" : "0 (DISABLED)");
-    Serial.println("NO SD state record = 0; validated SD record 1 = auto resume.");
-    Serial.println("To reset first-start behavior, remove AVBAY_A.DAT and AVBAY_B.DAT while powered OFF.");
     Serial.println("Await ground Serial Monitor command 1 to enable, 0 to pause.");
     beginNewLinkSession();
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+    // Optional, non-blocking MCP23017 discovery. Never required for radio or sensors.
+    // NO autonomous recovery event connects to these outputs.
+    optionalRelay.begin();
+    Serial.println("OPTIONAL RELAY BENCH ENABLED: USB-only, no solenoids/igniters attached.");
+#else
+    Serial.println("OPTIONAL MCP23017 RELAY BENCH: DISABLED (default); no I2C access.");
+#endif
     if (avBayState.enabled()) startActiveServices();
 }
 
 void loop() {
     wdt.feed();
     handleUsbBenchCommands();
+#if BEL_ENABLE_OPTIONAL_RELAY_BENCH
+    serviceRelayBenchPulse();
+#endif
     handleAirCommands();
     if (!avBayState.enabled()) {
         // Radio is fully powered and in RX, but sensor/telemetry processing is OFF.

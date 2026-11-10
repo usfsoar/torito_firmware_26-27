@@ -119,7 +119,7 @@ bool SDLogger::openChannel(Channel &c, const char *name, const char *header)
     return true;
 }
 
-bool SDLogger::mount()
+bool SDLogger::begin()
 {
     Serial.println();
     Serial.println("========== SD INITIALIZATION ==========");
@@ -198,13 +198,6 @@ bool SDLogger::mount()
     Serial.println("SD card communication SUCCESS.");
     cardOk = true;
 
-    return true;
-}
-
-bool SDLogger::beginLogging() {
-    if (!cardOk) return false;
-    if (loggingStarted) return true;
-
     bool gpsOk    = openChannel(gpsLog,    "gpslog.csv",  "timestamp,lat,lon,gps_alt_m,speed_kn,sats,fix");
     bool sensorOk = openChannel(sensorLog, "sensors.csv",
         "timestamp,baro_alt_m,max_alt_m,pressure_hpa,temp_c,ax_mg,ay_mg,az_mg,gx_dps,gy_dps,gz_dps,phi_deg,theta_deg,vert_acc_mps2,drogue,main");
@@ -221,12 +214,7 @@ bool SDLogger::beginLogging() {
     Serial.println(gpsOk && sensorOk ? "SD LOGGER READY." : "SD LOGGER PARTLY READY (see errors above).");
     Serial.println("=======================================");
 
-    loggingStarted = gpsOk || sensorOk;
-    return loggingStarted;
-}
-
-bool SDLogger::begin() {
-    return mount() && beginLogging();
+    return gpsOk || sensorOk;
 }
 
 void SDLogger::logGps(const FlightData &d)
@@ -410,39 +398,4 @@ bool SDLogger::saveLinkSummary(uint32_t session, uint32_t attempts,
         (unsigned long)millis(),(unsigned long)session,(unsigned long)attempts,
         (unsigned long)completed,(unsigned long)failed);
     const bool ok=n>0 && out.sync(); out.close(); return ok;
-}
-
-// Store two redundant, checksummed enable-state records. Each write replaces
-// the *other* slot, leaving the previous record available after a torn write.
-// Files are independent of the CSV logs and never imply physical solenoid arming.
-static const char *enableRecordName(uint8_t slot) {
-    return slot == 0 ? "AVBAY_A.DAT" : (slot == 1 ? "AVBAY_B.DAT" : nullptr);
-}
-
-bool SDLogger::readEnableRecord(uint8_t slot, uint8_t *out, size_t length) {
-    if (!cardOk || !out || length != 16U) return false;
-    const char *name=enableRecordName(slot);
-    if (!name) return false;
-    FsFile file=sd.open(name,O_RDONLY);
-    if (!file) return false;
-    const bool correctSize=(file.size() == length);
-    const int n=correctSize ? file.read(out,length) : -1;
-    file.close();
-    return correctSize && n == (int)length;
-}
-
-bool SDLogger::writeEnableRecord(uint8_t slot, const uint8_t *data, size_t length) {
-    if (!cardOk || !data || length != 16U) return false;
-    const char *name=enableRecordName(slot);
-    if (!name) return false;
-    FsFile file=sd.open(name,O_WRONLY | O_CREAT | O_TRUNC);
-    if (!file) return false;
-    const size_t written=file.write(data,length);
-    const bool synced = (written == length) && file.sync();
-    file.close();
-    if (!synced) return false;
-    uint8_t check[16];
-    if (!readEnableRecord(slot,check,sizeof(check))) return false;
-    for (size_t i=0;i<length;++i) if (check[i]!=data[i]) return false;
-    return true;
 }

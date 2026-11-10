@@ -1,6 +1,7 @@
 #include "RadioReceiver.h"
 #include "Config.h"
 #include "FlightPacket.h"
+#include "FhssConfig.h"
 
 RadioReceiver::RadioReceiver() : radio(RFM96W_CS_PIN, RFM96W_INT_PIN) {}
 
@@ -28,18 +29,19 @@ bool RadioReceiver::begin()
 
     if (!radio.setFrequency(RF_FREQUENCY)) return false;
     radio.setSignalBandwidth(RADIO_BANDWIDTH_HZ);
-    radio.setSpreadingFactor(8);
+    radio.setSpreadingFactor(7);
     radio.setCodingRate4(5);
     radio.setPayloadCRC(true);
     radio.setPreambleLength(8);
     radio.setTxPower(17, false);
 
     if (ENABLE_FHSS)
-        radio.spiWrite(REG_HOP_PERIOD, 0x1A);
+        radio.spiWrite(REG_HOP_PERIOD, BEL_HOP_PERIOD_SYMBOLS);
     else
         radio.spiWrite(REG_HOP_PERIOD, 0x00);
 
     radio.spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xFF);
+    belFhssResetToStart(radio);
     radio.setModeRx();
 
     Serial.print("RX radio version (usually 0x12): 0x");
@@ -53,8 +55,9 @@ bool RadioReceiver::begin()
     Serial.print("RX: listening at ");
     Serial.print(RF_FREQUENCY, 3);
     Serial.print(" MHz; BW="); Serial.print(RADIO_BANDWIDTH_HZ / 1000U);
-    Serial.println("kHz SF=8 CR=4/5 CRC=ON; IRQ POLLING; 32-byte BINARY frames");
+    Serial.println("kHz SF=7 CR=4/5 CRC=ON; IRQ POLLING; 32-byte BINARY frames");
     Serial.println("RX: DIO0 pin is not needed by this polling version.");
+    Serial.println("FHSS EXPERIMENTAL: 3 channels, 20 symbols/hop, SPI polling; not field-qualified.");
     Serial.print("RX expected frame bytes: Flight="); Serial.print(sizeof(FlightPacket));
     Serial.print(" Control="); Serial.print(sizeof(ControlPacket));
     Serial.print(" Stats="); Serial.println(sizeof(LinkStatsPacket));
@@ -63,6 +66,7 @@ bool RadioReceiver::begin()
 
 bool RadioReceiver::available()
 {
+    belFhssService(radio);
     // Calling available() ensures RadioHead is actually in continuous RX.
     if (radio.available()) return true;
 
@@ -85,7 +89,8 @@ ReceivedKind RadioReceiver::receive(FlightData &data, ControlPacket &control,
 {
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len=sizeof(buf);
-    if (!radio.recv(buf,&len)) { radio.setModeRx(); return ReceivedKind::Nothing; }
+    if (!radio.recv(buf,&len)) { belFhssResetToStart(radio); radio.setModeRx(); return ReceivedKind::Nothing; }
+    belFhssResetToStart(radio);
     radio.setModeRx();
     if (len==sizeof(FlightPacket)) {
         FlightPacket packet;
@@ -115,16 +120,19 @@ ReceivedKind RadioReceiver::receive(FlightData &data, ControlPacket &control,
 bool RadioReceiver::sendControl(const ControlPacket &control) {
     // Temporarily transmit on the same RFM96W, then return to RX immediately.
     radio.spiWrite(RH_RF95_REG_12_IRQ_FLAGS,0xFF);
+    belFhssResetToStart(radio);
     const bool started=radio.send(reinterpret_cast<const uint8_t*>(&control),sizeof(control));
     bool finished=false;
     const uint32_t start=millis();
     while (started && (uint32_t)(millis()-start)<250UL) {
+        belFhssService(radio);
         if (radio.spiRead(RH_RF95_REG_12_IRQ_FLAGS)&RH_RF95_TX_DONE) {
             finished=true;
             break;
         }
     }
     radio.spiWrite(RH_RF95_REG_12_IRQ_FLAGS,0xFF);
+    belFhssResetToStart(radio);
     radio.setModeRx();
     return started && finished;
 }

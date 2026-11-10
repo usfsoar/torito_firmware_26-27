@@ -1,11 +1,12 @@
 #include "AvBayEnableState.h"
 #include "ControlProtocol.h"
-#include "SDLogger.h"
+#include <EEPROM.h>
 
 namespace {
 constexpr uint32_t MAGIC = 0x534F4154UL;   // SOAR state
 constexpr uint32_t COMMIT = 0xA65C2D91UL;
 constexpr int SLOT_SIZE = 16;
+constexpr int SLOT_COUNT = 2;
 static void store32(uint8_t *dst, uint32_t v) {
     for (int i=0; i<4; ++i) dst[i] = static_cast<uint8_t>(v >> (8*i));
 }
@@ -29,7 +30,7 @@ static void format(uint8_t *p, uint32_t seq, bool enabled) {
 
 bool AvBayEnableState::load(int slot, uint32_t &seq, bool &enabled) const {
     uint8_t p[SLOT_SIZE];
-    if (!storage || !storage->readEnableRecord((uint8_t)slot,p,sizeof(p))) return false;
+    for (int i=0; i<SLOT_SIZE; ++i) p[i] = EEPROM.read(slot*SLOT_SIZE+i);
     if (read32(p+0) != MAGIC || read32(p+12) != COMMIT || p[8]>1 ||
         p[9] != static_cast<uint8_t>(~p[8])) return false;
     const uint16_t stored = static_cast<uint16_t>(p[10]) |
@@ -40,13 +41,12 @@ bool AvBayEnableState::load(int slot, uint32_t &seq, bool &enabled) const {
     return true;
 }
 
-bool AvBayEnableState::begin(SDLogger &logger) {
-    storage=&logger;
+bool AvBayEnableState::begin() {
     isEnabled = false;
     activeSlot = -1;
     generation = 0;
-    hasStorage = logger.cardReady();
-    if (!hasStorage) return false;
+    hasEeprom = EEPROM.length() >= SLOT_SIZE*SLOT_COUNT;
+    if (!hasEeprom) return false;
     uint32_t g0=0,g1=0;
     bool e0=false,e1=false;
     const bool ok0=load(0,g0,e0), ok1=load(1,g1,e1);
@@ -59,13 +59,17 @@ bool AvBayEnableState::begin(SDLogger &logger) {
 }
 
 bool AvBayEnableState::setEnabled(bool requested) {
-    if (!hasStorage || !storage) return false; // Never enable if SD unavailable
-    if (activeSlot>=0 && isEnabled==requested) return true; // avoid unnecessary SD writes
+    if (!hasEeprom) return false;             // Never enable if persistence unavailable
+    if (activeSlot>=0 && isEnabled==requested) return true; // avoid EEPROM wear
     const int target = (activeSlot==0) ? 1 : 0;
     uint8_t p[SLOT_SIZE];
     format(p, generation+1, requested);
-    // Never overwrite the last valid slot; verify the full new file on SD.
-    if (!storage->writeEnableRecord((uint8_t)target,p,sizeof(p))) return false;
+    const int base=target*SLOT_SIZE;
+    // Invalidate the slot BEFORE updating data. Commit byte is written last.
+    EEPROM.update(base+12,0);
+    for (int i=0; i<12; ++i) EEPROM.update(base+i,p[i]);
+    for (int i=13; i<SLOT_SIZE; ++i) EEPROM.update(base+i,p[i]);
+    EEPROM.update(base+12,p[12]);
     uint32_t verifiedGeneration=0;
     bool verifiedEnabled=false;
     if (!load(target, verifiedGeneration, verifiedEnabled) ||
