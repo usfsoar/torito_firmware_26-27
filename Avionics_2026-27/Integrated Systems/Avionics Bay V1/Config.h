@@ -20,7 +20,7 @@ const unsigned int GPS_BAUD_RATE = 9600;
 
 // ----- External Adafruit MicroSD breakout -----
 // Uses SPI1, NOT the normal SPI bus.
-const bool SD_IS_BUILTIN = false;
+const bool SD_IS_BUILTIN = true;
 const int SD_CS_PIN = 0;
 const uint32_t SD_SPI_SPEED_MHZ = 4;
 const uint32_t LOG_FLUSH_MS = 1000;

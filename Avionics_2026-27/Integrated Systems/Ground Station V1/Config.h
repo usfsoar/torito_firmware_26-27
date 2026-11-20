@@ -20,7 +20,7 @@ const int SERIAL_BAUD_RATE = 115200;
 
 // ----- External Adafruit MicroSD breakout -----
 // Uses SPI1, NOT the normal SPI bus used by the radio.
-const bool SD_IS_BUILTIN = false;
+const bool SD_IS_BUILTIN = true;
 
 // IMPORTANT: must match the physical CS wire from the SD breakout.
 const int SD_CS_PIN = 0;
