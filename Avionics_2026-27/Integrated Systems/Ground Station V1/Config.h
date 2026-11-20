@@ -40,6 +40,8 @@ const uint32_t RADIO_BANDWIDTH_HZ = 500000UL;  // MUST MATCH ON BOTH RADIOS
 const uint8_t SOAR_TARGET_HZ = 50;             // 50 Hz attempt target (not guaranteed throughput)
 
 #define REG_HOP_PERIOD 0x24
+#define REG_IRQ_FLAGS 0x12
+#define IRQ_TX_DONE   0x08
 
 const bool ENABLE_FHSS = true; // experimental; requires both radios to service hop IRQ
 
