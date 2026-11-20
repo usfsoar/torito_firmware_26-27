@@ -7,7 +7,7 @@
 
 // ----- RFM96W LoRa radio -----
 // Normal SPI bus: SCK = 13, MOSI = 11, MISO = 12
-const int RFM96W_CS_PIN  = 40;
+const int RFM96W_CS_PIN  = 36;
 const int RFM96W_RST_PIN = 9;
 const int RFM96W_INT_PIN = 2;
 
@@ -23,7 +23,7 @@ const int SERIAL_BAUD_RATE = 115200;
 const bool SD_IS_BUILTIN = true;
 
 // IMPORTANT: must match the physical CS wire from the SD breakout.
-const int SD_CS_PIN = 0;
+const int SD_CS_PIN = 10;
 
 // Start slow for reliability. Once everything works, try 10 or 20 MHz.
 const uint32_t SD_SPI_SPEED_MHZ = 4;
